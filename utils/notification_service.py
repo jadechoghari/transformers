@@ -1168,7 +1168,7 @@ if __name__ == "__main__":
             json.dump(model_results, fp, indent=4, ensure_ascii=False)
 
         # upload results to Hub dataset (only for the scheduled daily CI run on `main`)
-        if is_scheduled_ci_run:
+        if is_scheduled_ci_run or True:
             api.upload_file(
                 path_or_fileobj=f"ci_results_{job_name}/model_results.json",
                 path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/model_results.json",
@@ -1190,7 +1190,7 @@ if __name__ == "__main__":
             json.dump(job_result, fp, indent=4, ensure_ascii=False)
 
         # upload results to Hub dataset (only for the scheduled daily CI run on `main`)
-        if is_scheduled_ci_run:
+        if is_scheduled_ci_run or True:
             api.upload_file(
                 path_or_fileobj=f"ci_results_{job_name}/{test_to_result_name[job]}_results.json",
                 path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/{test_to_result_name[job]}_results.json",
