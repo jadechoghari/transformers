@@ -30,8 +30,8 @@ scenario:
     batch_size: 1
     sequence_length: 7
   generate_kwargs:
-    max_new_tokens: 128
-    min_new_tokens: 128
+    max_new_tokens: 1024
+    min_new_tokens: 1024
     do_sample: false
   memory: true
   latency: true

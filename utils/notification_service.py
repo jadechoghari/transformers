@@ -638,7 +638,7 @@ class Message:
 
     def get_new_model_failure_blocks(self, with_header=True, to_truncate=True):
         if self.prev_ci_artifacts is None:
-            return {}
+            return []
 
         sorted_dict = sorted(self.model_results.items(), key=lambda t: t[0])
 
@@ -764,10 +764,11 @@ class Message:
 
         # To save the list of new model failures
         blocks = self.get_new_model_failure_blocks(to_truncate=False)
-        failure_text = blocks[-1]["text"]["text"]
-        file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
-        with open(file_path, "w", encoding="UTF-8") as fp:
-            fp.write(failure_text)
+        if blocks:
+            failure_text = blocks[-1]["text"]["text"]
+            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
+            with open(file_path, "w", encoding="UTF-8") as fp:
+                fp.write(failure_text)
 
 
 def retrieve_artifact(artifact_path: str, gpu: Optional[str]):
