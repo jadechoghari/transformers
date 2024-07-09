@@ -379,6 +379,7 @@ _import_structure = {
     "models.dialogpt": [],
     "models.dinat": ["DinatConfig"],
     "models.dinov2": ["Dinov2Config"],
+    "models.dinov2exp": ["DINOv2ExpConfig"],
     "models.distilbert": [
         "DistilBertConfig",
         "DistilBertTokenizer",
@@ -2007,6 +2008,13 @@ else:
             "Dinov2ForImageClassification",
             "Dinov2Model",
             "Dinov2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.dinov2exp"].extend(
+        [
+            "DINOv2ExpForImageClassification",
+            "DINOv2ExpModel",
+            "Dinov2ExpPreTrainedModel",
         ]
     )
     _import_structure["models.distilbert"].extend(
@@ -5035,6 +5043,7 @@ if TYPE_CHECKING:
     from .models.detr import DetrConfig
     from .models.dinat import DinatConfig
     from .models.dinov2 import Dinov2Config
+    from .models.dinov2exp import DINOv2ExpConfig
     from .models.distilbert import (
         DistilBertConfig,
         DistilBertTokenizer,
@@ -6577,6 +6586,11 @@ if TYPE_CHECKING:
             Dinov2ForImageClassification,
             Dinov2Model,
             Dinov2PreTrainedModel,
+        )
+        from .models.dinov2exp import (
+            DINOv2ExpForImageClassification,
+            DINOv2ExpModel,
+            DINOv2ExpPreTrainedModel,
         )
         from .models.distilbert import (
             DistilBertForMaskedLM,
