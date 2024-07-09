@@ -71,12 +71,12 @@ class DINOv2ExpEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
-
+    # interpolation must be required in Dinov2 as opposed to vit in HF
     def forward(
         self,
         pixel_values: torch.Tensor,
     ) -> torch.Tensor:
-        batch_size = pixel_values.shape[0]
+        batch_size, _, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values)
 
         # add the [CLS] token to the embedded patch tokens
@@ -84,7 +84,14 @@ class DINOv2ExpEmbeddings(nn.Module):
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         # add positional encoding to each token
-        embeddings = embeddings + self.position_embeddings
+        # the pos embeddings are defined for 1370 positions while we only require 257 pos
+
+        
+        # add positional encoding to each token
+        embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+
+        print("Shape of embeddings: ", embeddings.shape)
+        print("First values of embeddings: ", embeddings[0, :3, :3])
 
         embeddings = self.dropout(embeddings)
 
@@ -115,16 +122,11 @@ class DINOv2ExpPatchEmbeddings(nn.Module):
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        _, num_channels, height, width = pixel_values.shape
+        num_channels = pixel_values.shape[1]
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
                 f" Expected {self.num_channels} but got {num_channels}."
-            )
-        if height != self.image_size[0] or width != self.image_size[1]:
-            raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model"
-                f" ({self.image_size[0]}*{self.image_size[1]})."
             )
         embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return embeddings
