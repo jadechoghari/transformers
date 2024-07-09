@@ -12,18 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert DINOv2Exp checkpoints trained with the DINO method."""
+"""Convert DINOv2Exp checkpoints from the original repository: 
+URL: https://github.com/facebookresearch/dinov2
+
+"""
 
 import argparse
-import json
 from pathlib import Path
 
 import requests
 import torch
-from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import DINOv2ExpConfig, DINOv2ExpForImageClassification, DINOv2ExpImageProcessor, DINOv2ExpModel
+from torchvision import transforms
+
+from transformers import DINOv2ExpConfig, ViTImageProcessor, DINOv2ExpModel
 from transformers.utils import logging
 
 
@@ -31,64 +34,60 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-# here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys(config, base_model=False):
-    rename_keys = []
-    for i in range(config.num_hidden_layers):
-        # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append((f"blocks.{i}.norm1.weight", f"dinov2exp.encoder.layer.{i}.layernorm_before.weight"))
-        rename_keys.append((f"blocks.{i}.norm1.bias", f"dinov2exp.encoder.layer.{i}.layernorm_before.bias"))
-        rename_keys.append((f"blocks.{i}.attn.proj.weight", f"dinov2exp.encoder.layer.{i}.attention.output.dense.weight"))
-        rename_keys.append((f"blocks.{i}.attn.proj.bias", f"dinov2exp.encoder.layer.{i}.attention.output.dense.bias"))
-        rename_keys.append((f"blocks.{i}.norm2.weight", f"dinov2exp.encoder.layer.{i}.layernorm_after.weight"))
-        rename_keys.append((f"blocks.{i}.norm2.bias", f"dinov2exp.encoder.layer.{i}.layernorm_after.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"dinov2exp.encoder.layer.{i}.intermediate.dense.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"dinov2exp.encoder.layer.{i}.intermediate.dense.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"dinov2exp.encoder.layer.{i}.output.dense.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"dinov2exp.encoder.layer.{i}.output.dense.bias"))
+def get_dinov2_config(model_name):
 
-    # projection layer + position embeddings
-    rename_keys.extend(
-        [
-            ("cls_token", "dinov2exp.embeddings.cls_token"),
-            ("patch_embed.proj.weight", "dinov2exp.embeddings.patch_embeddings.projection.weight"),
-            ("patch_embed.proj.bias", "dinov2exp.embeddings.patch_embeddings.projection.bias"),
-            ("pos_embed", "dinov2exp.embeddings.position_embeddings"),
-        ]
-    )
+    config = DINOv2ExpConfig(image_size=518, patch_size=14)
+    
 
-    if base_model:
-        # layernorm + pooler
-        rename_keys.extend(
-            [
-                ("norm.weight", "layernorm.weight"),
-                ("norm.bias", "layernorm.bias"),
-            ]
-        )
-
-        # if just the base model, we should remove "dinov2exp" from all keys that start with "dinov2exp"
-        rename_keys = [(pair[0], pair[1][4:]) if pair[1].startswith("dinov2exp") else pair for pair in rename_keys]
+    # size of the architecture
+    # change couple of model sizes model comes in
+    if "vits" in model_name:
+        raise NotImplementedError("to do")
+    elif "vitb" in model_name:
+        raise NotImplementedError("to do")
+    elif "vitl" in model_name:
+        # raise NotImplementedError("to do")
+        pass
+    elif "vitg" in model_name:
+        raise NotImplementedError("to do")
     else:
-        # layernorm + classification head
-        rename_keys.extend(
-            [
-                ("norm.weight", "dinov2exp.layernorm.weight"),
-                ("norm.bias", "dinov2exp.layernorm.bias"),
-                ("head.weight", "classifier.weight"),
-                ("head.bias", "classifier.bias"),
-            ]
-        )
+        raise ValueError("Model not supported")
+    
+    return config
 
+
+# here we list all keys to be renamed (original name on the left, our name on the right)
+def create_rename_keys(config):
+    rename_keys = []
+    # fmt: off
+
+    # patch embedding layer
+    rename_keys.append(("cls_token", "embeddings.cls_token"))
+    rename_keys.append(("pos_embed", "embeddings.position_embeddings"))
+    rename_keys.append(("patch_embed.proj.weight", "embeddings.patch_embeddings.projection.weight"))
+    rename_keys.append(("patch_embed.proj.bias", "embeddings.patch_embeddings.projection.bias"))
+
+
+    # TODO transformer block
+    # for i in range(config.vision_config.num_hidden_layers):
+    #     rename_keys.append((f"visual_encoder.blocks.{i}.norm1.weight", f"vision_model.encoder.layers.{i}.layer_norm1.weight"))
+    #     rename_keys.append((f"visual_encoder.blocks.{i}.norm1.bias", f"vision_model.encoder.layers.{i}.layer_norm1.bias"))
+
+
+
+
+    # fmt: on
     return rename_keys
 
 
+def rename_key(dct, old, new):
+    val = dct.pop(old)
+    dct[new] = val
+
 # we split up the matrix of each encoder layer into queries, keys and values
-def read_in_q_k_v(state_dict, config, base_model=False):
+def read_in_q_k_v(state_dict, config):
     for i in range(config.num_hidden_layers):
-        if base_model:
-            prefix = ""
-        else:
-            prefix = "dinov2exp."
+        prefix = ""
         # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
         in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
         in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
@@ -109,10 +108,6 @@ def read_in_q_k_v(state_dict, config, base_model=False):
         state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
 
 
-def remove_classification_head_(state_dict):
-    ignore_keys = ["head.weight", "head.bias"]
-    for k in ignore_keys:
-        state_dict.pop(k, None)
 
 
 def rename_key(dct, old, new):
@@ -123,76 +118,68 @@ def rename_key(dct, old, new):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    image = Image.open(requests.get(url, stream=True).raw)
+    return image
 
 
 @torch.no_grad()
-def convert_dinov2exp_checkpoint(model_name, pytorch_dump_folder_path, base_model=True):
+def convert_dinov2exp_checkpoint(model_name, pytorch_dump_folder_path):
     """
     Copy/paste/tweak model's weights to our DINOv2Exp structure.
     """
 
     # define default DINOv2Exp configuration
-    config = DINOv2ExpConfig()
-    # patch_size
-    if model_name[-1] == "8":
-        config.patch_size = 8
-    # set labels if required
-    if not base_model:
-        config.num_labels = 1000
-        repo_id = "huggingface/label-files"
-        filename = "imagenet-1k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
-        id2label = {int(k): v for k, v in id2label.items()}
-        config.id2label = id2label
-        config.label2id = {v: k for k, v in id2label.items()}
-    # size of the architecture
-    if model_name in ["dino_dinov2exps8", "dino_dinov2exps16"]:
-        config.hidden_size = 384
-        config.intermediate_size = 1536
-        config.num_hidden_layers = 12
-        config.num_attention_heads = 6
+    config = get_dinov2_config(model_name)
 
     # load original model from torch hub
-    original_model = torch.hub.load("facebookresearch/dino:main", model_name)
+    original_model = torch.hub.load('facebookresearch/dinov2', model_name)
     original_model.eval()
 
     # load state_dict of original model, remove and rename some keys
     state_dict = original_model.state_dict()
-    if base_model:
-        remove_classification_head_(state_dict)
-    rename_keys = create_rename_keys(config, base_model=base_model)
+    rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
-    read_in_q_k_v(state_dict, config, base_model)
+    read_in_q_k_v(state_dict, config)
 
     # load HuggingFace model
-    if base_model:
-        model = DINOv2ExpModel(config, add_pooling_layer=False).eval()
-    else:
-        model = DINOv2ExpForImageClassification(config).eval()
-    model.load_state_dict(state_dict)
+    model = DINOv2ExpModel(config, add_pooling_layer=False).eval()
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+    print("Missing keys: ", missing_keys)
+    print("Unexpected keys: ", unexpected_keys)
 
-    # Check outputs on an image, prepared by DINOv2ExpImageProcessor
-    image_processor = DINOv2ExpImageProcessor()
-    encoding = image_processor(images=prepare_img(), return_tensors="pt")
-    pixel_values = encoding["pixel_values"]
-    outputs = model(pixel_values)
+    # Check outputs on an image, prepared by ViTImageProcessor,
+    # image_processor = ViTImageProcessor()
+    # encoding = image_processor(images=prepare_img(), return_tensors="pt")
+    # pixel_values = encoding["pixel_values"]
 
-    if base_model:
-        final_hidden_state_cls_token = original_model(pixel_values)
-        assert torch.allclose(final_hidden_state_cls_token, outputs.last_hidden_state[:, 0, :], atol=1e-1)
-    else:
-        logits = original_model(pixel_values)
-        assert logits.shape == outputs.logits.shape
-        assert torch.allclose(logits, outputs.logits, atol=1e-3)
+    # load image
+    url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+    image = Image.open(requests.get(url, stream=True).raw)
 
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving image processor to {pytorch_dump_folder_path}")
-    image_processor.save_pretrained(pytorch_dump_folder_path)
+    #preprocess image
+    transformations = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+
+    pixel_values = transformations(image).unsqueeze(0)
+
+    with torch.no_grad():
+        outputs = model(pixel_values)
+
+    final_hidden_state_cls_token = original_model(pixel_values)
+    assert torch.allclose(final_hidden_state_cls_token, outputs.last_hidden_state[:, 0, :], atol=1e-1)
+
+
+    if pytorch_dump_folder_path is not None:
+        Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+        print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
+        model.save_pretrained(pytorch_dump_folder_path)
+        print(f"Saving image processor to {pytorch_dump_folder_path}")
+        image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
@@ -200,19 +187,13 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="dino_dinov2expb16",
+        default="dinov2_vitl14", # mind need to change name to exp!
         type=str,
-        help="Name of the model trained with DINO you'd like to convert.",
+        choices=["dinov2_vits14", 'dinov2_vitl14', 'dinov2_vitb14', 'dinov2_vitg14'],
+        help="Name of the model you'd like to convert."
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
-    parser.add_argument(
-        "--base_model",
-        action="store_true",
-        help="Whether to only convert the base model (no projection head weights).",
-    )
-
-    parser.set_defaults(base_model=True)
     args = parser.parse_args()
-    convert_dinov2exp_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.base_model)
+    convert_dinov2exp_checkpoint(args.model_name, args.pytorch_dump_folder_path)
