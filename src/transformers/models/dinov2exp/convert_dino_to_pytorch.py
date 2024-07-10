@@ -189,7 +189,9 @@ def convert_dinov2exp_checkpoint(model_name, pytorch_dump_folder_path):
     with torch.no_grad():
         outputs = model(pixel_values)
 
-    print("Outputs:", outputs.keys())
+    last_hidden_state = outputs.last_hidden_state
+    print("Outputs:", last_hidden_state.shape)
+    print("First values of final hidden states:", last_hidden_state[0, :3, :3])
     # TODO assert values
     # assert torch.allclose(final_hidden_state_cls_token, outputs.last_hidden_state[:, 0, :], atol=1e-1)
 
