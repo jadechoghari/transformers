@@ -23,12 +23,10 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
     ImageClassifierOutput,
-    MaskedImageModelingOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
@@ -37,7 +35,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings,
 )
 from .configuration_dinov2exp import DINOv2ExpConfig
 
@@ -119,7 +116,6 @@ class DINOv2ExpEmbeddings(nn.Module):
         # add positional encoding to each token
         # the pos embeddings are defined for 1370 positions while we only require 257 pos
 
-        
         # add positional encoding to each token
         embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
 
@@ -330,8 +326,6 @@ class DINOv2ExpSdpaAttention(DINOv2ExpAttention):
         self.attention = DINOv2ExpSdpaSelfAttention(config)
 
 
-
-
 DINOV2EXP_ATTENTION_CLASSES = {
     "eager": DINOv2ExpAttention,
     "sdpa": DINOv2ExpSdpaAttention,
@@ -351,6 +345,7 @@ class DINOv2ExpLayerScale(nn.Module):
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         return x.mul_(self.gamma) if self.inplace else hidden_state * self.gamma
+
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
 def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
@@ -414,7 +409,6 @@ class DINOv2ExpMLP(nn.Module):
         return hidden_state
 
 
-
 class DINOv2ExpLayer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
 
@@ -432,8 +426,6 @@ class DINOv2ExpLayer(nn.Module):
         self.mlp = DINOv2ExpMLP(config.hidden_size, mlp_hidden_size)
         self.layer_scale2 = DINOv2ExpLayerScale(config.hidden_size, init_values=config.layerscale_value)
         self.drop_path2 = DINOv2ExpDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-        
-        
 
     def forward(
         self,
@@ -449,7 +441,7 @@ class DINOv2ExpLayer(nn.Module):
         attention_output = self_attention_outputs[0]
         attention_output = self.layer_scale1(attention_output)
         # need to apply residual
-        
+
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
@@ -708,9 +700,6 @@ class DINOv2ExpPooler(nn.Module):
         pooled_output = self.dense(first_token_tensor)
         pooled_output = self.activation(pooled_output)
         return pooled_output
-
-
-
 
 
 @add_start_docstrings(
