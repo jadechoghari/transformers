@@ -91,6 +91,11 @@ def create_rename_keys(config):
         rename_keys.append((f"blocks.{i}.attn.proj.bias", f"encoder.layer.{i}.attention.output.dense.bias"))
 
 
+        # final layer norm
+        rename_keys.append(("norm.weight", "layernorm.weight"))
+        rename_keys.append(("norm.bias", "layernorm.bias"))
+
+
         # TODO attention
 
 
