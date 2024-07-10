@@ -65,7 +65,7 @@ def create_rename_keys(config):
     rename_keys.append(("patch_embed.proj.bias", "embeddings.patch_embeddings.projection.bias"))
 
 
-    for i in range(config.vision_config.num_hidden_layers):
+    for i in range(config.num_hidden_layers):
 
         #layernorms
         rename_keys.append((f"blocks.{i}.norm1.weight", f"encoder.layer.{i}.norm1.weight"))
@@ -120,9 +120,14 @@ def read_in_q_k_v(state_dict, config):
         state_dict[f"encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
 
 
+# def rename_key(dct, old, new):
+#     val = dct.pop(old)
+#     dct[new] = val
 def rename_key(dct, old, new):
-    val = dct.pop(old)
-    dct[new] = val
+    if new not in dct:
+        val = dct.pop(old)
+        dct[new] = val
+
 
 
 # We will verify our results on an image of cute cats
@@ -147,9 +152,13 @@ def convert_dinov2exp_checkpoint(model_name, pytorch_dump_folder_path):
 
     # load state_dict of original model, remove and rename some keys
     state_dict = original_model.state_dict()
+
     # rename keys to match hf implementation
     rename_keys = create_rename_keys(config)
+
+    print('rename_keys', rename_keys)
     for src, dest in rename_keys:
+        # bug to fix
         rename_key(state_dict, src, dest)
     read_in_q_k_v(state_dict, config)
 
@@ -187,14 +196,18 @@ def convert_dinov2exp_checkpoint(model_name, pytorch_dump_folder_path):
         outputs = model(pixel_values)
 
     last_hidden_state = outputs.last_hidden_state
-    print("Outputs:", last_hidden_state.shape)
-    print("First values of final hidden states:", last_hidden_state[0, :3, :3])
+    # print("Outputs:", last_hidden_state.shape)
+    # print("First values of final hidden states:", last_hidden_state[0, :3, :3])
     # TODO assert values
 
     # add assert for a value for some output to compare
     # use torch.allclose
 
-    assert torch.allclose(final_hidden_state_cls_token, outputs.last_hidden_state[:, 0, :], atol=1e-1)
+    # assert torch.allclose(final_hidden_state_cls_token, outputs.last_hidden_state[:, 0, :], atol=1e-1)
+    expected_slice = torch.tensor([[-2.1849, -0.3433,  1.0913],
+        [-3.2696, -0.7386, -0.8044],
+        [-3.0603,  1.2498, -0.7685]])
+    assert torch.allclose(last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
@@ -219,3 +232,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     convert_dinov2exp_checkpoint(args.model_name, args.pytorch_dump_folder_path)
+

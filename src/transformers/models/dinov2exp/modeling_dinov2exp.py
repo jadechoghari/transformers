@@ -150,19 +150,19 @@ class DINOv2ExpPatchEmbeddings(nn.Module):
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
-        batch_size, num_channels, height, width = pixel_values.shape
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        _, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
                 f" Expected {self.num_channels} but got {num_channels}."
             )
-        if not interpolate_pos_encoding:
-            if height != self.image_size[0] or width != self.image_size[1]:
-                raise ValueError(
-                    f"Input image size ({height}*{width}) doesn't match model"
-                    f" ({self.image_size[0]}*{self.image_size[1]})."
-                )
+
+        # if height != self.image_size[0] or width != self.image_size[1]:
+        #     raise ValueError(
+        #         f"Input image size ({height}*{width}) doesn't match model"
+        #         f" ({self.image_size[0]}*{self.image_size[1]})."
+        #     )
         embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return embeddings
 
@@ -628,17 +628,11 @@ class DINOv2ExpModel(DINOv2ExpPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -661,7 +655,7 @@ class DINOv2ExpModel(DINOv2ExpPreTrainedModel):
             pixel_values = pixel_values.to(expected_dtype)
 
         embedding_output = self.embeddings(
-            pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
+            pixel_values
         )
 
         encoder_outputs = self.encoder(
@@ -737,7 +731,6 @@ class DINOv2ExpForImageClassification(DINOv2ExpPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ImageClassifierOutput]:
         r"""
@@ -753,7 +746,6 @@ class DINOv2ExpForImageClassification(DINOv2ExpPreTrainedModel):
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 
