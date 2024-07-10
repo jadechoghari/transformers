@@ -9,6 +9,7 @@ from ...utils import (
     is_torchvision_available,
 )
 
+
 _import_structure = {"configuration_dinov2exp": ["DINOv2ExpConfig", "DINOv2ExpOnnxConfig"]}
 
 try:
@@ -84,7 +85,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_tf_dinov2exp import TFDINOv2ExpForImageClassification, TFDINOv2ExpModel, TFDINOv2ExpPreTrainedModel
+        from .modeling_tf_dinov2exp import (
+            TFDINOv2ExpForImageClassification,
+            TFDINOv2ExpModel,
+            TFDINOv2ExpPreTrainedModel,
+        )
 
     try:
         if not is_flax_available():
@@ -92,7 +97,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_flax_dinov2exp import FlaxDINOv2ExpForImageClassification, FlaxDINOv2ExpModel, FlaxDINOv2ExpPreTrainedModel
+        from .modeling_flax_dinov2exp import (
+            FlaxDINOv2ExpForImageClassification,
+            FlaxDINOv2ExpModel,
+            FlaxDINOv2ExpPreTrainedModel,
+        )
 
 else:
     import sys

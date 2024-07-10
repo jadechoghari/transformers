@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert DINOv2Exp checkpoints from the original repository: 
+"""Convert DINOv2Exp checkpoints from the original repository:
 URL: https://github.com/facebookresearch/dinov2
 
 """
@@ -23,10 +23,9 @@ from pathlib import Path
 import requests
 import torch
 from PIL import Image
-
 from torchvision import transforms
 
-from transformers import DINOv2ExpConfig, ViTImageProcessor, DINOv2ExpModel
+from transformers import DINOv2ExpConfig, DINOv2ExpModel
 from transformers.utils import logging
 
 
@@ -35,9 +34,7 @@ logger = logging.get_logger(__name__)
 
 
 def get_dinov2_config(model_name):
-
     config = DINOv2ExpConfig(image_size=518, patch_size=14)
-    
 
     # size of the architecture
     # change couple of model sizes model comes in
@@ -52,7 +49,7 @@ def get_dinov2_config(model_name):
         raise NotImplementedError("to do")
     else:
         raise ValueError("Model not supported")
-    
+
     return config
 
 
@@ -104,10 +101,6 @@ def create_rename_keys(config):
     return rename_keys
 
 
-def rename_key(dct, old, new):
-    val = dct.pop(old)
-    dct[new] = val
-
 # we split up the matrix of each encoder layer into queries, keys and values
 def read_in_q_k_v(state_dict, config):
     for i in range(config.num_hidden_layers):
@@ -115,9 +108,7 @@ def read_in_q_k_v(state_dict, config):
         in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
         in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
-            : config.hidden_size, :
-        ]
+        state_dict[f"encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[: config.hidden_size, :]
         state_dict[f"encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
         state_dict[f"encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
             config.hidden_size : config.hidden_size * 2, :
@@ -125,12 +116,8 @@ def read_in_q_k_v(state_dict, config):
         state_dict[f"encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
             config.hidden_size : config.hidden_size * 2
         ]
-        state_dict[f"encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
-            -config.hidden_size :, :
-        ]
+        state_dict[f"encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-config.hidden_size :, :]
         state_dict[f"encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
-
-
 
 
 def rename_key(dct, old, new):
@@ -155,11 +142,11 @@ def convert_dinov2exp_checkpoint(model_name, pytorch_dump_folder_path):
     config = get_dinov2_config(model_name)
 
     # load original model from torch hub very handy
-    original_model = torch.hub.load('facebookresearch/dinov2', model_name)
+    original_model = torch.hub.load("facebookresearch/dinov2", model_name)
     original_model.eval()
 
     # load state_dict of original model, remove and rename some keys
-    state_dict = original_model.state_dict() 
+    state_dict = original_model.state_dict()
     # rename keys to match hf implementation
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
@@ -181,16 +168,18 @@ def convert_dinov2exp_checkpoint(model_name, pytorch_dump_folder_path):
     # pixel_values = encoding["pixel_values"]
 
     # load image
-    url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
 
-    #preprocess image
-    transformations = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
+    # preprocess image
+    transformations = transforms.Compose(
+        [
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )
 
     pixel_values = transformations(image).unsqueeze(0)
 
@@ -201,8 +190,11 @@ def convert_dinov2exp_checkpoint(model_name, pytorch_dump_folder_path):
     print("Outputs:", last_hidden_state.shape)
     print("First values of final hidden states:", last_hidden_state[0, :3, :3])
     # TODO assert values
-    # assert torch.allclose(final_hidden_state_cls_token, outputs.last_hidden_state[:, 0, :], atol=1e-1)
 
+    # add assert for a value for some output to compare
+    # use torch.allclose
+
+    assert torch.allclose(final_hidden_state_cls_token, outputs.last_hidden_state[:, 0, :], atol=1e-1)
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
@@ -217,10 +209,10 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="dinov2_vitb14", # mind need to change name to exp!
+        default="dinov2_vitb14",  # mind need to change name to exp!
         type=str,
-        choices=['dinov2_vitb14', "dinov2_vits14", 'dinov2_vitl14', 'dinov2_vitg14'],
-        help="Name of the model you'd like to convert."
+        choices=["dinov2_vitb14", "dinov2_vits14", "dinov2_vitl14", "dinov2_vitg14"],
+        help="Name of the model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
