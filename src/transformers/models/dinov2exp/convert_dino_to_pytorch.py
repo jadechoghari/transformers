@@ -169,8 +169,11 @@ def convert_dinov2exp_checkpoint(model_name, pytorch_dump_folder_path):
     # load HuggingFace model
     model = DINOv2ExpModel(config, add_pooling_layer=False).eval()
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-    print("Missing keys: ", missing_keys)
-    print("Unexpected keys: ", unexpected_keys)
+
+    assert len(missing_keys) == 0
+    assert unexpected_keys == ["mask_token"]
+    # print("Missing keys: ", missing_keys)
+    # print("Unexpected keys: ", unexpected_keys)
 
     # Check outputs on an image, prepared by ViTImageProcessor,
     # image_processor = ViTImageProcessor()
