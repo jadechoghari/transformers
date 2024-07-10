@@ -3419,6 +3419,27 @@ class Dinov2PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class DINOv2ExpForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DINOv2ExpModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DINOv2ExpPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class DistilBertForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
 

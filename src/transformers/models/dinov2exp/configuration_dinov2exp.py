@@ -66,8 +66,10 @@ class DINOv2ExpConfig(PretrainedConfig):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        encoder_stride (`int`, *optional*, defaults to 16):
-           Factor to increase the spatial resolution by in the decoder head for masked image modeling.
+        layerscale_value (`float`, *optional*, defaults to 1.0):
+           Initial value to use for layer scale
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
+            The drop rate for stochastic depth.
 
     Example:
 
@@ -91,7 +93,7 @@ class DINOv2ExpConfig(PretrainedConfig):
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
-        intermediate_size=3072,
+        mlp_ratio=4,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
@@ -101,7 +103,8 @@ class DINOv2ExpConfig(PretrainedConfig):
         patch_size=16,
         num_channels=3,
         qkv_bias=True,
-        encoder_stride=16,
+        layerscale_value=1.0,
+        drop_path_rate=0.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -109,7 +112,7 @@ class DINOv2ExpConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
+        self.mlp_ratio = mlp_ratio
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
@@ -119,7 +122,8 @@ class DINOv2ExpConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
-        self.encoder_stride = encoder_stride
+        self.layerscale_value = layerscale_value
+        self.drop_path_rate = drop_path_rate
 
 
 class DINOv2ExpOnnxConfig(OnnxConfig):
