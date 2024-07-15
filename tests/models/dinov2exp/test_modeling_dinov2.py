@@ -200,7 +200,7 @@ class Dinov2ExpModelTester:
 
 
 @require_torch
-class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Dinov2ExpModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as Dinov2 does not use input_ids, inputs_embeds,
     attention_mask and seq_length.

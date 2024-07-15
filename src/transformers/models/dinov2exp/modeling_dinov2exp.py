@@ -492,13 +492,21 @@ class DINOv2ExpEncoder(nn.Module):
                     layer_head_mask,
                     output_attentions,
                 )
+                print("layer_outputs for true: ", layer_outputs[0])
             else:
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
-
+               
+                print("layer_outputs for len: 1 ", len(layer_outputs))
             hidden_states = layer_outputs[0]
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
+                if head_mask is None:
+                  print("true is none")
+                else:
+                  print('HeAD mask:', head_mask)
+            else:
+              print("No all self attention: ", all_self_attentions )
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -649,6 +657,8 @@ class DINOv2ExpModel(DINOv2ExpPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
+        #ADD 
+        print("Output attention is set to: ", output_attentions)
         # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
         expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
         if pixel_values.dtype != expected_dtype:
@@ -658,6 +668,7 @@ class DINOv2ExpModel(DINOv2ExpPreTrainedModel):
             pixel_values
         )
 
+        print("tHIS IS THE HEADMASK: ", head_mask)
         encoder_outputs = self.encoder(
             embedding_output,
             head_mask=head_mask,
@@ -665,6 +676,7 @@ class DINOv2ExpModel(DINOv2ExpPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
