@@ -871,7 +871,7 @@ class ModelTesterMixin:
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
             print(f"Model name: {model.__class__.__name__}")
-             print("Output keys:", outputs.keys())
+           
             print("Attentions: ", attentions)
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
             
