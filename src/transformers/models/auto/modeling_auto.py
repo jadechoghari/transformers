@@ -85,6 +85,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("detr", "DetrModel"),
         ("dinat", "DinatModel"),
         ("dinov2", "Dinov2Model"),
+        ("dinov2exp", "DINOv2ExpModel"),
         ("distilbert", "DistilBertModel"),
         ("donut-swin", "DonutSwinModel"),
         ("dpr", "DPRQuestionEncoder"),
@@ -532,6 +533,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("detr", "DetrModel"),
         ("dinat", "DinatModel"),
         ("dinov2", "Dinov2Model"),
+        ("dinov2", "DINOv2ExpModel"),
         ("dpt", "DPTModel"),
         ("efficientformer", "EfficientFormerModel"),
         ("efficientnet", "EfficientNetModel"),
@@ -604,6 +606,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ),
         ("dinat", "DinatForImageClassification"),
         ("dinov2", "Dinov2ForImageClassification"),
+        ("dinov2exp", "DINOv2ExpForImageClassification"),
         (
             "efficientformer",
             (

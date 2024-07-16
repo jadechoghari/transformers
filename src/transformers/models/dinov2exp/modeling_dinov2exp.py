@@ -347,10 +347,10 @@ class DINOv2ExpLayerScale(nn.Module):
     ) -> None:
         super().__init__()
         self.inplace = inplace
-        self.gamma = nn.Parameter(init_values * torch.ones(dim))
+        self.lambda1 = nn.Parameter(init_values * torch.ones(dim))
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        return x.mul_(self.gamma) if self.inplace else hidden_state * self.gamma
+        return hidden_state * self.lambda1
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
