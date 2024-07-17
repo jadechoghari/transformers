@@ -185,7 +185,6 @@ class DINOv2ExpSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-        print("Self attenetion init!")
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
@@ -197,7 +196,6 @@ class DINOv2ExpSelfAttention(nn.Module):
     def forward(
         self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        print("Forward method of Dinov2SelfAttention called")
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -216,7 +214,6 @@ class DINOv2ExpSelfAttention(nn.Module):
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        print("attention_probs in selfattneiton", attention_probs)
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -229,7 +226,6 @@ class DINOv2ExpSelfAttention(nn.Module):
         context_layer = context_layer.view(new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-        print("In self attention output attention is : ", output_attentions)
         return outputs
 
 
@@ -243,7 +239,6 @@ class DINOv2ExpSdpaSelfAttention(DINOv2ExpSelfAttention):
         self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
-        print("RUN RUN")
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
         query_layer = self.transpose_for_scores(mixed_query_layer)
@@ -320,7 +315,6 @@ class DINOv2ExpAttention(nn.Module):
 
         attention_output = self.output(self_outputs[0], hidden_states)
 
-        print("self_outputs[1:]: ", self.attention(hidden_states, head_mask, output_attentions))
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
@@ -659,7 +653,6 @@ class DINOv2ExpModel(DINOv2ExpPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         #ADD 
-        print("Output attention is set to: ", output_attentions)
         # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
         expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
         if pixel_values.dtype != expected_dtype:
