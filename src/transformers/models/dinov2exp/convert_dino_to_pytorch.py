@@ -138,7 +138,7 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_dinov2exp_checkpoint(model_name, pytorch_dump_folder_path):
+def convert_dinov2exp_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     """
     Copy/paste/tweak model's weights to our DINOv2Exp structure.
     """
@@ -175,6 +175,7 @@ def convert_dinov2exp_checkpoint(model_name, pytorch_dump_folder_path):
     # image_processor = ViTImageProcessor()
     # encoding = image_processor(images=prepare_img(), return_tensors="pt")
     # pixel_values = encoding["pixel_values"]
+
 
     # load image
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -213,9 +214,23 @@ def convert_dinov2exp_checkpoint(model_name, pytorch_dump_folder_path):
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        print(f"Saving image processor to {pytorch_dump_folder_path}")
-        image_processor.save_pretrained(pytorch_dump_folder_path)
+        # print(f"Saving image processor to {pytorch_dump_folder_path}")
+        # image_processor.save_pretrained(pytorch_dump_folder_path)
 
+    if push_to_hub:
+        model_name_to_hf_name = {
+            "dinov2_vits14": "dinov2-small",
+            "dinov2_vitb14": "dinov2-base",
+            "dinov2_vitl14": "dinov2-large",
+            "dinov2_vitg14": "dinov2-giant",
+            "dinov2_vits14_1layer": "dinov2-small-imagenet1k-1-layer",
+            "dinov2_vitb14_1layer": "dinov2-base-imagenet1k-1-layer",
+            "dinov2_vitl14_1layer": "dinov2-large-imagenet1k-1-layer",
+            "dinov2_vitg14_1layer": "dinov2-giant-imagenet1k-1-layer",
+        }
+        name = model_name_to_hf_name[model_name]
+        model.push_to_hub(f"jadechoghari/{name}")
+        # image_processor.push_to_hub(f"jadechoghari/{model_name}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -230,6 +245,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
+    parser.add_argument(
+        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+    )
     args = parser.parse_args()
-    convert_dinov2exp_checkpoint(args.model_name, args.pytorch_dump_folder_path)
+    convert_dinov2exp_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
 
