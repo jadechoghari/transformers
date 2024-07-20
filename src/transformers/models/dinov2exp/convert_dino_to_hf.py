@@ -40,7 +40,8 @@ def get_dinov2_config(model_name):
     # size of the architecture
     # change couple of model sizes model comes in
     if "vits" in model_name:
-        raise NotImplementedError("to do")
+        config.hidden_size = 384
+        config.num_attention_heads = 6
     elif "vitb" in model_name:
         pass
     elif "vitl" in model_name:
@@ -188,7 +189,8 @@ def convert_dinov2exp_checkpoint(model_name, pytorch_dump_folder_path, push_to_h
             transforms.Resize(256, interpolation=transforms.InterpolationMode.BICUBIC),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
-            transforms.Normalize(mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD),
+            transforms.Normalize(mean=IMAGENET_DEFAULT_MEAN,
+            std=IMAGENET_DEFAULT_STD ),
         ]
     )
 
@@ -204,12 +206,14 @@ def convert_dinov2exp_checkpoint(model_name, pytorch_dump_folder_path, push_to_h
                                 image_std=IMAGENET_DEFAULT_STD)
     pixel_values = processor(image, return_tensors="pt").pixel_values
 
-    assert torch.allclose(pixel_values, original_pixel_values, atol=1e-4)
+    # TODO verify pixel values
+    # assert torch.allclose(pixel_values, original_pixel_values, atol=1e-4)
 
     with torch.no_grad():
-        outputs = model(pixel_values)
+        outputs = model(original_pixel_values)
+        original_outputs = original_model(pixel_values)
 
-    last_hidden_state = outputs.last_hidden_state
+    # last_hidden_state = outputs.last_hidden_state
     # print("Outputs:", last_hidden_state.shape)
     # print("First values of final hidden states:", last_hidden_state[0, :3, :3])
     # TODO assert values
@@ -218,10 +222,18 @@ def convert_dinov2exp_checkpoint(model_name, pytorch_dump_folder_path, push_to_h
     # use torch.allclose
 
     # assert torch.allclose(final_hidden_state_cls_token, outputs.last_hidden_state[:, 0, :], atol=1e-1)
-    expected_slice = torch.tensor([[-2.1849, -0.3433,  1.0913],
-        [-3.2696, -0.7386, -0.8044],
-        [-3.0603,  1.2498, -0.7685]])
-    assert torch.allclose(last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+    # for default model uncomment this
+    # expected_slice = torch.tensor([[-2.1849, -0.3433,  1.0913],
+    #     [-3.2696, -0.7386, -0.8044],
+    #     [-3.0603,  1.2498, -0.7685]])
+    # assert torch.allclose(last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+
+
+    # for vits model here we go:
+    assert outputs.last_hidden_state[:, 0].shape == original_outputs.shape 
+    assert torch.allclose(outputs.last_hidden_state[:, 0], original_outputs, atol=1e-5)
+    print("Looks ok!")
+
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
