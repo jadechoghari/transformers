@@ -45,10 +45,14 @@ def get_dinov2_config(model_name):
     elif "vitb" in model_name:
         pass
     elif "vitl" in model_name:
-        # raise NotImplementedError("to do")
-        raise NotImplementedError("to do")
+        config.hidden_size = 1024
+        config.num_hidden_layers = 24
+        config.num_attention_heads = 16
     elif "vitg" in model_name:
-        raise NotImplementedError("to do")
+        config.use_swiglu_ffn = True
+        config.hidden_size = 1536
+        config.num_hidden_layers = 40
+
     else:
         raise ValueError("Model not supported")
 
@@ -76,10 +80,16 @@ def create_rename_keys(config):
         rename_keys.append((f"blocks.{i}.norm2.bias", f"encoder.layer.{i}.norm2.bias"))
 
         # MLP
-        rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"encoder.layer.{i}.mlp.fc1.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"encoder.layer.{i}.mlp.fc1.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"encoder.layer.{i}.mlp.fc2.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"encoder.layer.{i}.mlp.fc2.bias"))
+        if config.use_swiglu_ffn:
+            rename_keys.append((f"blocks.{i}.mlp.w12.weight", f"encoder.layer.{i}.mlp.w12.weight"))
+            rename_keys.append((f"blocks.{i}.mlp.w12.bias", f"encoder.layer.{i}.mlp.w12.bias"))
+            rename_keys.append((f"blocks.{i}.mlp.w3.weight", f"encoder.layer.{i}.mlp.w3.weight"))
+            rename_keys.append((f"blocks.{i}.mlp.w3.bias", f"encoder.layer.{i}.mlp.w3.bias"))
+        else: 
+            rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"encoder.layer.{i}.mlp.fc1.weight"))
+            rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"encoder.layer.{i}.mlp.fc1.bias"))
+            rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"encoder.layer.{i}.mlp.fc2.weight"))
+            rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"encoder.layer.{i}.mlp.fc2.bias"))
 
         # layerscale
         rename_keys.append((f"blocks.{i}.ls1.gamma", f"encoder.layer.{i}.layer_scale1.lambda1"))
@@ -231,7 +241,7 @@ def convert_dinov2exp_checkpoint(model_name, pytorch_dump_folder_path, push_to_h
 
     # for vits model here we go:
     assert outputs.last_hidden_state[:, 0].shape == original_outputs.shape 
-    assert torch.allclose(outputs.last_hidden_state[:, 0], original_outputs, atol=1e-5)
+    assert torch.allclose(outputs.last_hidden_state[:, 0], original_outputs, atol=1e-5) #was 1e-5
     print("Looks ok!")
 
 

@@ -70,6 +70,8 @@ class DINOv2ExpConfig(PretrainedConfig):
            Initial value to use for layer scale
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop rate for stochastic depth.
+        use_swiglu_ffn (`bool`, *optional*, defaults to 'False '):
+            Weither to use the SwiGLU feedforward neural network.
 
     Example:
 
@@ -104,7 +106,8 @@ class DINOv2ExpConfig(PretrainedConfig):
         num_channels=3,
         qkv_bias=True,
         layerscale_value=1.0,
-        drop_path_rate=0.0,
+         drop_path_rate=0.0,
+        use_swiglu_ffn=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -123,7 +126,9 @@ class DINOv2ExpConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
         self.layerscale_value = layerscale_value
-        self.drop_path_rate = drop_path_rate
+        self.drop_path_rate = drop_path_rate, 
+        self.use_swiglu_ffn = False
+
 
 
 class DINOv2ExpOnnxConfig(OnnxConfig):

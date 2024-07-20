@@ -408,6 +408,27 @@ class DINOv2ExpMLP(nn.Module):
         hidden_state = self.drop(hidden_state)
         return hidden_state
 
+class DINOv2ExpSwiGLUFFN(nn.Module):
+    def __init__(
+        self,
+        in_features: int,
+        hidden_features: Optional[int] = None,
+        out_features: Optional[int] = None, 
+        bias: bool = True,
+    ) -> None:
+        super().__init__()
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+        hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
+        self.w12 = nn.Linear(in_features, 2 * hidden_features, bias=bias)
+        self.w3 = nn.Linear(hidden_features, out_features, bias=bias) 
+
+    def forward(self, hidden_state: torch.Tensor) -> torch. Tensor:
+        x12 = self.w12(hidden_state)
+        x1, x2 = x12.chunk(2, dim=-1)
+        hidden = nn.functional .silu(x1) * x2
+        return self.w3(hidden) 
+    
 
 class DINOv2ExpLayer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
@@ -423,7 +444,11 @@ class DINOv2ExpLayer(nn.Module):
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         mlp_hidden_size = int(config.hidden_size * config.mlp_ratio)
-        self.mlp = DINOv2ExpMLP(config.hidden_size, mlp_hidden_size)
+
+        if config.use_swiglu_ffn:
+            self.mlp = DINOv2ExpSwiGLUFFN(config.hidden_size, mlp_hidden_size)
+        else: 
+            self.mlp = DINOv2ExpMLP(config.hidden_size, mlp_hidden_size)
         self.layer_scale2 = DINOv2ExpLayerScale(config.hidden_size, init_values=config.layerscale_value)
         self.drop_path2 = DINOv2ExpDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
