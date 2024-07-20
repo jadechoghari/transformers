@@ -74,6 +74,7 @@ else:
             ("detr", ("DetrImageProcessor",)),
             ("dinat", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("dinov2", ("BitImageProcessor",)),
+            ("dinov2exp", ("BitImageProcessor",)),
             ("donut-swin", ("DonutImageProcessor",)),
             ("dpt", ("DPTImageProcessor",)),
             ("efficientformer", ("EfficientFormerImageProcessor",)),

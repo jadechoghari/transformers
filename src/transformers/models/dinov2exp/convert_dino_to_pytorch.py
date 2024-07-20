@@ -25,7 +25,8 @@ import torch
 from PIL import Image
 from torchvision import transforms
 
-from transformers import DINOv2ExpConfig, DINOv2ExpModel
+from transformers import DINOv2ExpConfig, DINOv2ExpModel, BitImageProcessor
+from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
 from transformers.utils import logging
 
 
@@ -184,14 +185,26 @@ def convert_dinov2exp_checkpoint(model_name, pytorch_dump_folder_path, push_to_h
     # preprocess image
     transformations = transforms.Compose(
         [
-            transforms.Resize(256),
+            transforms.Resize(256, interpolation=transforms.InterpolationMode.BICUBIC),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            transforms.Normalize(mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD),
         ]
     )
 
-    pixel_values = transformations(image).unsqueeze(0)
+    original_pixel_values = transformations(image).unsqueeze(0)
+
+    #always check the size (can be different)
+    processor = BitImageProcessor(do_resize=True, 
+                                  resample=PILImageResampling.BICUBIC,
+                                  size={"shortest_edge": 256},
+                                do_center_crop=True, crop_size={"height": 224, "width": 224},
+                                do_normalize=True,
+                                image_mean=IMAGENET_DEFAULT_MEAN, 
+                                image_std=IMAGENET_DEFAULT_STD)
+    pixel_values = processor(image, return_tensors="pt").pixel_values
+
+    assert torch.allclose(pixel_values, original_pixel_values, atol=1e-4)
 
     with torch.no_grad():
         outputs = model(pixel_values)
