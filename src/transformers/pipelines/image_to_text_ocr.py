@@ -5,20 +5,31 @@ from transformers import MgpstrProcessor, MgpstrForSceneTextRecognition
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
 if is_vision_available():
     from ..image_utils import load_image
+from PIL import Image
 
 def crop_regions_from_bboxes(images, all_boxes):
-    cropped_regions = []
-    if images.ndim == 3:
-        images = images.unsqueeze(0)
-        all_boxes = [all_boxes]
-    for img, item in zip(images, all_boxes):
-        for poly in item["boxes"]:
+    """
+    images: list of PIL.Image (original images)
+    all_boxes: list of dicts, one per image (each with key "boxes" as list of polygons)
+    Returns: list of lists of PIL.Image (crops per image)
+    """
+    # handle single image input for convenience
+    if isinstance(images, Image.Image):
+        images = [images]
+    cropped_batch = []
+    for img, boxes_dict in zip(images, all_boxes):
+        crops = []
+        for poly in boxes_dict["boxes"]:
             xs, ys = zip(*poly)
-            x1, x2 = min(xs), max(xs)
-            y1, y2 = min(ys), max(ys)
-            cropped = img[:, y1:y2, x1:x2]
-            cropped_regions.append(cropped)
-    return cropped_regions
+            x1, x2 = int(min(xs)), int(max(xs))
+            y1, y2 = int(min(ys)), int(max(ys))
+            crop = img.crop((x1, y1, x2, y2))
+            crops.append(crop)
+        cropped_batch.append(crops)
+    return cropped_batch
+
+
+
 
 class OCRPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
@@ -33,6 +44,7 @@ class OCRPipeline(Pipeline):
     def preprocess(self, image):
         # image can be either url or PIL object
         image = load_image(image) # return PIL object regardless
+        self.image = image
         target_size = torch.IntTensor([[image.height, image.width]])
         inputs = self.image_processor(image, return_tensors="pt") # return image in pixel space
         
@@ -45,28 +57,17 @@ class OCRPipeline(Pipeline):
         detection_outputs = self.model(**model_inputs)
 
         # Step 2: Postprocess detection results
-        all_boxes = self.image_processor.post_process_text_detection(detection_outputs, target_sizes=target_size, threshold=0.88)
-        # Step 3: Crop regions from each image using the detected boxes
-        cropped_regions = crop_regions_from_bboxes(model_inputs['pixel_values'], all_boxes)
+        all_boxes = self.image_processor.post_process_text_detection(detection_outputs, target_sizes=target_size, threshold=0.7,  output_type="boxes")
 
-        from torchvision.transforms.functional import to_pil_image
+        # Step 3: Crop the region needed
+        cropped_regions = crop_regions_from_bboxes(self.image, all_boxes)
 
-        # Use the same mean/std as your image processor (usually ImageNet stats)
-        mean = [0.485, 0.456, 0.406]
-        std = [0.229, 0.224, 0.225]
+        # Flatten if needed
+        if cropped_regions and isinstance(cropped_regions[0], list):
+            cropped_regions = [item for sublist in cropped_regions for item in sublist]
 
-        def denormalize(crop, mean, std):
-            for t, m, s in zip(crop, mean, std):
-                t.mul_(s).add_(m)
-            return crop.clamp(0, 1)
-
-        pil_crops = []
-        for crop in cropped_regions:
-            crop = denormalize(crop.clone(), mean, std)  # clone to avoid inplace ops
-            pil = to_pil_image(crop)
-            pil_crops.append(pil)
         # Step 4: Forward pass through TrOCR or MGP-STR on cropped regions
-        recog_inputs = self.recog_processor(images=pil_crops, return_tensors="pt")
+        recog_inputs = self.recog_processor(images=cropped_regions, return_tensors="pt")
         return recog_inputs
 
 
