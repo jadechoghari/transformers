@@ -90,6 +90,7 @@ from .zero_shot_audio_classification import ZeroShotAudioClassificationPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
+from .image_to_text_ocr import OCRPipeline
 
 
 if is_tf_available():
@@ -437,6 +438,14 @@ SUPPORTED_TASKS = {
         "tf": (),
         "pt": (AutoModelForImageToImage,) if is_torch_available() else (),
         "default": {"model": {"pt": ("caidas/swin2SR-classical-sr-x2-64", "cee1c92")}},
+        "type": "image",
+    },
+    #TODO: (jadechoghari) add ocr here
+    "ocr": {
+        "impl": OCRPipeline,
+        "tf": (),
+        "pt": (AutoModel,) if is_torch_available() else (),
+        "default": {"model": {"pt": ("jadechoghari/fast_tiny_ckpt", "9605a29c7e25294c0b03ca3ec9e8d642082b7841")}},
         "type": "image",
     },
 }
