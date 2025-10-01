@@ -643,6 +643,9 @@ class SiglipVisionTransformer(SiglipPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        # Convert to bfloat16 if the encoder uses bfloat16
+        if len(self.encoder.layers) > 0 and self.encoder.layers[0].self_attn.q_proj.weight.dtype == torch.bfloat16:
+            hidden_states = hidden_states.to(torch.bfloat16)
 
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
