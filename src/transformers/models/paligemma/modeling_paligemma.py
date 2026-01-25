@@ -21,16 +21,17 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...cache_utils import Cache, HybridCache, StaticCache
+from ...cache_utils import Cache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, ModelOutput, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torchdynamo_compiling
+from transformers.utils import TransformersKwargs as LossKwargs # check jadechoghari, good for now
 from ..auto import AutoModel
 from .configuration_paligemma import PaliGemmaConfig
-
+from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
 
@@ -99,6 +100,17 @@ class PaliGemmaMultiModalProjector(nn.Module):
         return hidden_states
 
 
+class PaliGemmaVideoMultiModalProjector(nn.Module):
+    def __init__(self, config: PaliGemmaConfig):
+        super().__init__()
+        self.linear = nn.Linear(config.video_config.hidden_size, config.video_config.projection_dim, bias=True)
+
+    def forward(self, video_features):
+        hidden_states = self.linear(video_features)
+
+        return hidden_states
+
+
 @auto_docstring
 class PaliGemmaPreTrainedModel(PreTrainedModel):
     config_class = PaliGemmaConfig
@@ -141,10 +153,19 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
         self.multi_modal_projector = PaliGemmaMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
 
+        # Optional video tower for video understanding with VideoPrism
+        if config.video_config is not None:
+            self.video_tower = AutoModel.from_config(config=config.video_config)
+            self.video_multi_modal_projector = PaliGemmaVideoMultiModalProjector(config)
+        else:
+            self.video_tower = None
+            self.video_multi_modal_projector = None
+
         language_model = AutoModel.from_config(config=config.text_config)
         self.language_model = language_model
 
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        # self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        self.pad_token_id = 0 # jadechoghari, changed
         self.post_init()
 
     # Copied from transformers.models.llava.modeling_llava.LlavaModel.get_input_embeddings with Llava->PaliGemma
@@ -182,8 +203,6 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
 
         inputs_lead_dim, sequence_length = input_tensor.shape[:2]
         if using_static_cache:
-            target_length = past_key_values.get_max_cache_shape()
-        elif isinstance(past_key_values, HybridCache):
             target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
@@ -244,12 +263,33 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
         image_features = self.multi_modal_projector(selected_image_feature)
         return image_features
 
+    def get_video_features(self, pixel_values_videos: torch.FloatTensor):
+        """
+        Obtains video last hidden states from the video tower (VideoPrism) and apply multimodal projection.
+
+        Args:
+            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, channels, height, width)`)
+               The tensors corresponding to the input videos.
+        Returns:
+            video_features (`torch.Tensor`): Video feature tensor of shape `(batch_size, video_length, embed_dim)`).
+        """
+        if self.video_tower is None:
+            raise ValueError(
+                "Video tower is not initialized. Please provide a `video_config` when initializing PaliGemmaConfig "
+                "to enable video understanding."
+            )
+        video_outputs = self.video_tower(pixel_values_videos)
+        selected_video_feature = video_outputs.last_hidden_state
+        video_features = self.video_multi_modal_projector(selected_video_feature)
+        return video_features
+
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         pixel_values: torch.FloatTensor = None,
+        pixel_values_videos: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
@@ -322,7 +362,8 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0) + 1  # Paligemma positions are 1-indexed
 
-        # Merge text and images
+        # Merge text and images/videos
+        image_features = None
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values)
 
@@ -343,6 +384,30 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
                 )
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        # Merge text and videos (uses same image token positions for video features)
+        if pixel_values_videos is not None:
+            video_features = self.get_video_features(pixel_values_videos)
+
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            else:
+                special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
+                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+
+            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != video_features.numel():
+                video_tokens_in_text = (special_image_mask).sum(dim=1).sum(dim=0)[0]
+                raise ValueError(
+                    f"Number of video tokens does not match number of special image tokens in the input text. "
+                    f"Got {video_tokens_in_text} image tokens in the text but {video_features.shape[0] * video_features.shape[1]} "
+                    "tokens from video embeddings."
+                )
+            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, video_features)
+            # Use video_features for the output when video is provided
+            image_features = video_features
 
         causal_mask = self._update_causal_mask(
             attention_mask, token_type_ids, past_key_values, cache_position, inputs_embeds, is_training
@@ -365,7 +430,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if (pixel_values is not None or pixel_values_videos is not None) else None,
         )
 
 
@@ -390,6 +455,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         super().__init__(config)
         self.model = PaliGemmaModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.config.tie_word_embeddings = False  # changed by jadechoghari
         self.post_init()
 
     def get_input_embeddings(self):
@@ -413,6 +479,9 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
     def get_image_features(self, pixel_values):
         return self.model.get_image_features(pixel_values)
 
+    def get_video_features(self, pixel_values_videos):
+        return self.model.get_video_features(pixel_values_videos)
+
     # Make modules available throught conditional class for BC
     @property
     def language_model(self):
@@ -426,12 +495,21 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
     def multi_modal_projector(self):
         return self.model.multi_modal_projector
 
+    @property
+    def video_tower(self):
+        return self.model.video_tower
+
+    @property
+    def video_multi_modal_projector(self):
+        return self.model.video_multi_modal_projector
+
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         pixel_values: torch.FloatTensor = None,
+        pixel_values_videos: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
@@ -482,6 +560,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
             token_type_ids=token_type_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -524,6 +603,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         cache_position=None,
         position_ids=None,
         pixel_values=None,
+        pixel_values_videos=None,
         attention_mask=None,
         token_type_ids=None,
         use_cache=True,
@@ -552,8 +632,9 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         # Otherwise we need pixel values to be passed to model. NOTE: use_cache=False needs pixel_values always
         if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
+            model_inputs["pixel_values_videos"] = pixel_values_videos
         is_training = token_type_ids is not None and labels is not None
-        if cache_position[0] == 0 and isinstance(past_key_values, HybridCache):
+        if cache_position[0] == 0 and isinstance(past_key_values, StaticCache):
             input_tensor = inputs_embeds if inputs_embeds is not None else input_ids
             causal_mask = self.model._update_causal_mask(
                 attention_mask, token_type_ids, past_key_values, cache_position, input_tensor, is_training

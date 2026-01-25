@@ -36,6 +36,9 @@ class PaliGemmaConfig(PreTrainedConfig):
             Custom vision config or dict
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
+        video_config (`VideoPrismVisionConfig`, *optional*):
+            Custom video config or dict. When provided, enables video understanding using VideoPrism as the video encoder.
+            Defaults to `None` (video support disabled).
         image_token_index (`int`, *optional*, defaults to 256000):
             The image token index to encode the image prompt.
         vocab_size (`int`, *optional*, defaults to 257152):
@@ -73,13 +76,14 @@ class PaliGemmaConfig(PreTrainedConfig):
     attribute_map = {
         "image_token_id": "image_token_index",
     }
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "video_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
         vision_config=None,
         text_config=None,
+        video_config=None,
         image_token_index=256000,
         vocab_size=257152,
         projection_dim=2048,
@@ -124,10 +128,17 @@ class PaliGemmaConfig(PreTrainedConfig):
                 vocab_size=vocab_size,
             )
 
+        # Optional video config for video understanding with VideoPrism
+        self.video_config = video_config
+        if isinstance(self.video_config, dict):
+            video_config["model_type"] = video_config.get("model_type", "videoprism_vision_model")
+            self.video_config = CONFIG_MAPPING[video_config["model_type"]](**video_config)
+            self.video_config.projection_dim = projection_dim
+
         # BC: `use_bidirectional_attention` was originally unset in PaliGemma1 (backbone = Gemma1) AND PaliGemma2
         # (backbone = Gemma2). Both PaliGemmas want to default to True.
-        if self.text_config.use_bidirectional_attention is None:
-            self.text_config.use_bidirectional_attention = True
+        # if self.text_config.use_bidirectional_attention is None:
+        #     self.text_config.use_bidirectional_attention = True
 
         self.text_config.num_image_tokens = (self.vision_config.image_size // self.vision_config.patch_size) ** 2
         self.vision_config.projection_dim = projection_dim

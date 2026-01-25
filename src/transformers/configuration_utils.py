@@ -379,6 +379,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     def rope_scaling(self):
         return self.rope_parameters
 
+
     @rope_scaling.setter
     def rope_scaling(self, value):
         self.rope_parameters = value

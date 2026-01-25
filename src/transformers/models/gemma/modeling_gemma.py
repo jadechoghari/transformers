@@ -39,9 +39,10 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import auto_docstring, can_return_tuple
+from transformers.utils import TransformersKwargs as LossKwargs # check jadechoghari, good for now
 from .configuration_gemma import GemmaConfig
-
+from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
 

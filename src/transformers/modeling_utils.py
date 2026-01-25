@@ -2404,8 +2404,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Short-cut for the most common cases: if the tied weights mapping only contains already expanded params,
         # return it directly (the regex matches names containing only letters, numbers, dots, and underscores to make
         # sure it does not contain a regex pattern, and finishing by "bias" or "weight" to make sure it's not a module)
+        # changed by jadechoghari
         common_case_regex = re.compile(r"^[A-Za-z0-9_\.]+(weight)|(bias)$")
-        if all(common_case_regex.match(k) for k in tied_mapping.keys() | tied_mapping.values()):
+        if isinstance(tied_mapping, list):
+            tied_mapping = {k: k for k in tied_mapping}
+        if all(common_case_regex.match(k) for k in (set(tied_mapping.keys()) | set(tied_mapping.values()))):
             return tied_mapping.copy()
 
         # We need to expand the regex patterns or the modules into proper parameters
